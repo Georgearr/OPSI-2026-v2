@@ -1,0 +1,21 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model SensorLog {
+  id        Int      @id @default(autoincrement())
+  co_ppm    Float    @map("co_ppm")
+  h2s_ppm   Float    @map("h2s_ppm")
+  nh3_ppm   Float    @map("nh3_ppm")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sensor_logs")
+}

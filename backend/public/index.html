@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCO System Monitoring - 3 Gas</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen">
+
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8 border-b border-gray-800 pb-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-teal-400 tracking-wide">PCO MULTI-GAS MONITORING</h1>
+            </div>
+            <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-green-500 text-white animate-pulse">
+                CONNECTED
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
+                <h3 class="text-gray-400 font-medium text-sm uppercase tracking-wider">Karbon Monoksida (CO)</h3>
+                <div class="flex items-baseline mt-4">
+                    <span id="live-co" class="text-5xl font-extrabold text-red-400">0.00</span>
+                    <span class="text-gray-400 ml-2 text-xl">ppm</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
+                <h3 class="text-gray-400 font-medium text-sm uppercase tracking-wider">Hidrogen Sulfida (H₂S)</h3>
+                <div class="flex items-baseline mt-4">
+                    <span id="live-h2s" class="text-5xl font-extrabold text-emerald-400">0.00</span>
+                    <span class="text-gray-400 ml-2 text-xl">ppm</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-2 h-full bg-amber-500"></div>
+                <h3 class="text-gray-400 font-medium text-sm uppercase tracking-wider">Amonia (NH₃)</h3>
+                <div class="flex items-baseline mt-4">
+                    <span id="live-nh3" class="text-5xl font-extrabold text-amber-400">0.00</span>
+                    <span class="text-gray-400 ml-2 text-xl">ppm</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg mb-8">
+            <h3 class="text-gray-300 font-semibold mb-4 text-lg">Grafik Tren Real-Time (20 Data Terakhir)</h3>
+            <div class="relative h-96 w-full">
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inisialisasi Chart.js untuk 3 Parameter Gas
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Akan diisi data waktu (timestamp) dari API
+                datasets: [
+                    {
+                        label: 'CO (ppm)',
+                        data: [],
+                        borderColor: '#f87171',
+                        backgroundColor: 'rgba(248, 113, 113, 0.05)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'H2S (ppm)',
+                        data: [],
+                        borderColor: '#34d399',
+                        backgroundColor: 'rgba(52, 211, 153, 0.05)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'NH3 (ppm)',
+                        data: [],
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.05)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { 
+                        grid: { color: '#374151' }, 
+                        ticks: { color: '#9ca3af' } 
+                    },
+                    y: { 
+                        grid: { color: '#374151' }, 
+                        ticks: { color: '#9ca3af' } 
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f3f4f6' } }
+                }
+            }
+        });
+
+        // Fungsi fetch data dari API Backend Node.js
+        async function updateDashboard() {
+            try {
+                // Endpoint mengambil 20 data terakhir
+                const response = await fetch('/api/sensors/logs');
+                if (!response.ok) throw new Error('Gagal mengambil data dari API');
+                const data = await response.json();
+
+                if (data.length === 0) return;
+
+                // 1. Update Live Card Menggunakan Data Terbaru (Indeks Terakhir)
+                const latest = data[data.length - 1];
+                document.getElementById('live-co').innerText = parseFloat(latest.co_ppm).toFixed(2);
+                document.getElementById('live-h2s').innerText = parseFloat(latest.h2s_ppm).toFixed(2);
+                document.getElementById('live-nh3').innerText = parseFloat(latest.nh3_ppm).toFixed(2);
+
+                // 2. Format Waktu untuk Sumbu X Grafik (HH:MM:SS)
+                const labels = data.map(log => {
+                    const time = new Date(log.createdAt); // Sesuai camelCase properti dari Prisma
+                    return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                });
+
+                // 3. Mapping Array Data Gas untuk Disuntikkan ke Chart
+                sensorChart.data.labels = labels;
+                sensorChart.data.datasets[0].data = data.map(log => log.co_ppm);
+                sensorChart.data.datasets[1].data = data.map(log => log.h2s_ppm);
+                sensorChart.data.datasets[2].data = data.map(log => log.nh3_ppm);
+                
+                // Render Ulang Grafik dengan Data Baru
+                sensorChart.update();
+
+                // Reset badge ke mode Connected jika sukses berkomunikasi dengan API
+                document.getElementById('status-badge').className = "px-3 py-1 rounded-full text-xs font-semibold bg-green-500 text-white";
+                document.getElementById('status-badge').innerText = "CONNECTED";
+
+            } catch (error) {
+                console.error("Dashboard Error:", error);
+                // Ubah badge menjadi mode Disconnected jika server mati / API bermasalah
+                document.getElementById('status-badge').className = "px-3 py-1 rounded-full text-xs font-semibold bg-red-500 text-white animate-pulse";
+                document.getElementById('status-badge').innerText = "DISCONNECTED / API ERROR";
+            }
+        }
+
+        // Lakukan polling otomatis ke backend setiap 3 detik
+        setInterval(updateDashboard, 3000);
+        
+        // Jalankan sekali saat halaman web pertama kali dibuka
+        updateDashboard();
+    </script>
+</body>
+</html>
